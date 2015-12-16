@@ -1,5 +1,5 @@
 # nagios-Weblogic_health
-Weblogic server check via snmp/n
+Weblogic server check via snmp
 
 
 Can alert based on overall system health or you can specify the required status of the server.  
