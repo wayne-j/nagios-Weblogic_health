@@ -5,18 +5,13 @@
 ### my $lapps="fooapp|fooapp2";
 my $lapps="";
 
-my $i=0;
 my $x=0;
 my $k=0;
 my $warn=0;
 my $crit=0;
 my $health=0;
 my $strout=undef;
-my $lstrout=undef;
-my $lerout=undef;
-my $perfvalue="";
 my $lheap=undef;
-my $lheaperrout=undef;
 my $errout=undef;
 my $dplnum=0;
 my $runnum=0;
@@ -120,7 +115,6 @@ if ( $connections ) {
 	for ( my $x = 0; $x <= $#connections; $x++ ) {
 		$k=($connections[$x]+$k);
 		if ( $connections[$x] >= $totconnections[$x] ) {
-	#	if ( $connections[$x] >= 0 ) {
 			$jdbcerrout = $jdbcerrout.$nameconnections[$x]." ";
 			$crit++;
 			$health++;
