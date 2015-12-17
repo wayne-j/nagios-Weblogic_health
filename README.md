@@ -25,7 +25,7 @@ Total number of current JDCB connections
 
 Example command
 
-$USER1$/MyWeblogic $HOSTADDRESS$:$ARG1$ $ARG2$ $ARG3$
+$USER1$/weblogic_health.pl $HOSTADDRESS$:$ARG1$ $ARG2$ $ARG3$
 
 
 $ARG1$ = Port
