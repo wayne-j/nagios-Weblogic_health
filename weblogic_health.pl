@@ -13,9 +13,9 @@ my $k=0;
 my $warn=0;
 my $crit=0;
 my $health=0;
-my $strout=undef;
-my $errout=undef;
-my $warnout=undef;
+my $strout="";
+my $errout="";
+my $warnout="";
 my $dplnum=0;
 my $runnum=0;
 my $jdbcnum=0;
@@ -24,7 +24,7 @@ my $STATE_CRITICAL=2;
 my $STATE_WARNING=1;
 my $STATE_UNKNOWN=3;
 my $STATE_OK=0;
-my $jdbcerrout=undef;
+my $jdbcerrout="";
 
 sub print_usage {
     print "weblogic_health.pl IP:Port COMMUNITY [#apps] [#runtimes] [#JDBC]\n";
@@ -192,7 +192,7 @@ $strout="$strout. | $perfout";
 if ( $dplcrit ) {
 	if ( $health == 0 ) { $warn=$crit; $crit=0; }
 	$warnout=$errout;
-	$errout=undef;
+	$errout="";
 	if ( $dplnum != $dplcrit ) {
 		$crit++;
 		$errout= "Application count mismatch ($dplnum,$dplcrit). ";
@@ -232,4 +232,3 @@ else {
 	print "$strout\n";
 	exit $STATE_OK;
 }
-
