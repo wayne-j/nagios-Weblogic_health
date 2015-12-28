@@ -1,5 +1,8 @@
 #!/usr/bin/perl
 #https://github.com/waynejgrace/nagios-Weblogic_health
+#version 0.02 12/28/2015
+use strict;
+use warnings;
 
 ### identify your named deployed applications for filtering, separated by "|"
 ### my $lapps="fooapp|fooapp2";
@@ -11,43 +14,40 @@ my $warn=0;
 my $crit=0;
 my $health=0;
 my $strout=undef;
-my $lheap=undef;
 my $errout=undef;
+my $warnout=undef;
 my $dplnum=0;
 my $runnum=0;
 my $jdbcnum=0;
-my $dplcrit=undef;
-my $runcrit=undef;
-my $jdbccrit=undef;
-my $perfout=undef;
+my $perfout="";
+my $STATE_CRITICAL=2;
+my $STATE_WARNING=1;
+my $STATE_UNKNOWN=3;
+my $STATE_OK=0;
+my $jdbcerrout=undef;
 
 sub print_usage {
     print "weblogic_health.pl IP:Port COMMUNITY [#apps] [#runtimes] [#JDBC]\n";
 }
 
-if  ( @ARGV[0] eq "" || @ARGV[1] eq "" ) {
+if  ( $ARGV[0] eq "" || $ARGV[1] eq "" ) {
     print_usage();
-    exit 0;
+    exit $STATE_UNKNOWN;
 }
 
-if (( @ARGV[2] ) && ( @ARGV[3] eq "" || @ARGV[4] eq "" )) {
+if (( $ARGV[2] ) && ( $ARGV[3] eq "" || $ARGV[4] eq "" )) {
         print_usage();
-        exit 0;
+        exit $STATE_UNKNOWN;
 }
 
-$STATE_CRITICAL = 2;
-$STATE_WARNING = 1;
-$STATE_UNKNONW = 3;
-$STATE_OK = 0;
-
-my $IP=@ARGV[0];
-my $COMMUNITY=@ARGV[1];
-my $dplcrit=@ARGV[2];
-my $runcrit=@ARGV[3];
-my $jdbccrit=@ARGV[4];
+my $IP=$ARGV[0];
+my $COMMUNITY=$ARGV[1];
+my $dplcrit=$ARGV[2];
+my $runcrit=$ARGV[3];
+my $jdbccrit=$ARGV[4];
 
 my $lservers =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.360.1.60 2> /dev/null`;
-if ( !$lservers ) { print "No Weblogic Server Responding to SNMP.\n"; exit 3;}
+if ( !$lservers ) { print "No Weblogic Server Responding to SNMP.\n"; exit $STATE_UNKNOWN;}
 my $connections =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.190.1.25 2> /dev/null`;
 my $totconnections =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.190.1.60 2> /dev/null`;
 my $nameconnections =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.190.1.05 2> /dev/null`;
@@ -59,9 +59,9 @@ my $lheapname =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.340.1.15 2> 
 my $lappname =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.430.1.15 2> /dev/null`;
 my $lappdepl =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.430.1.30 2> /dev/null`;
 
-@lservers = split (/\n/,$lservers);
-@lservername = split (/\n/,$lservername);
-@lstatus = split (/\n/,$lstatus);
+my @lservers = split (/\n/,$lservers);
+my @lservername = split (/\n/,$lservername);
+my @lstatus = split (/\n/,$lstatus);
 foreach ( @lservers ) {
 	s/^.*STRING:.//s;
 }
@@ -74,7 +74,7 @@ foreach ( @lstatus ) {
 	s/,MBean:.*Code://;
 	s/"//;
 }	
-for ( my $x = 0; $x <= $#lservers; $x++ ) {
+for ( $x = 0; $x <= $#lservers; $x++ ) {
 	if ( $lservers[$x] !~ "RUNNING" ) {
 		$errout = $errout."Weblogic Runtime $lservername[$x] has status $lservers[$x]. ";
 		$crit++;
@@ -84,9 +84,8 @@ for ( my $x = 0; $x <= $#lservers; $x++ ) {
     }
 }
 $strout="$runnum Running weblogic runtime(s)";
-print $lerrout;
 
-for ( my $x = 0; $x <= $#lstatus; $x++ ) {
+for ( $x = 0; $x <= $#lstatus; $x++ ) {
 	if ( $lstatus[$x] !~ "HEALTH_OK" ) {
 		$errout = $errout."$lservername[$x] indicates $lstatus[$x]. ";
 		$crit++;
@@ -95,10 +94,10 @@ for ( my $x = 0; $x <= $#lstatus; $x++ ) {
 }	
 
 if ( $connections ) {
-	@connections = split (/\n/,$connections);
-	@totconnections = split (/\n/,$totconnections);
-	@nameconnections = split (/\n/,$nameconnections);
-	@connector = split (/\n/,$connector);
+	my @connections = split (/\n/,$connections);
+	my @totconnections = split (/\n/,$totconnections);
+	my @nameconnections = split (/\n/,$nameconnections);
+	my @connector = split (/\n/,$connector);
 	foreach ( @connections ) {
 		s/^.*INTEGER:.//s;
 	}
@@ -112,7 +111,7 @@ if ( $connections ) {
 	foreach ( @connector ) {
 		s/^.*STRING:.//s;
 	}
-	for ( my $x = 0; $x <= $#connections; $x++ ) {
+	for ( $x = 0; $x <= $#connections; $x++ ) {
 		$k=($connections[$x]+$k);
 		if ( $connections[$x] >= $totconnections[$x] ) {
 			$jdbcerrout = $jdbcerrout.$nameconnections[$x]." ";
@@ -120,7 +119,7 @@ if ( $connections ) {
 			$health++;
 		}	    
 	}
-	for ( my $x = 0; $x <= $#connector; $x++ ) {
+	for ( $x = 0; $x <= $#connector; $x++ ) {
 		if ( $connector[$x] !~ "Running") {
 		$crit++;
 		$errout= $errout.$nameconnections[$x]." is $connector[$x]. ";
@@ -142,8 +141,8 @@ else {
 }
 
 if( $lheap ) {
-	@lheap = split (/\n/,$lheap);
-	@lheapname = split (/\n/,$lheapname);
+	my @lheap = split (/\n/,$lheap);
+	my @lheapname = split (/\n/,$lheapname);
 	foreach ( @lheap) {
 		s/^.*INTEGER:.//s;
 	}
@@ -152,7 +151,7 @@ if( $lheap ) {
 		s/"//;
 		s/"//;
 	}
-	for ( my $x = 0; $x <= $#lheap; $x++ ) {
+	for ( $x = 0; $x <= $#lheap; $x++ ) {
 		$perfout=$perfout."'$lheapname[$x]'=".(100-$lheap[$x])."%;;90;0;100 ";
 		if ( $lheap[$x] <= 10 ) {
 			$errout = $errout."$lheapname[$x] is at $lheap[$x]% heap free. ";
@@ -163,8 +162,8 @@ if( $lheap ) {
 }
 
 if ( $lappname ) {
-	@lappname = split (/\n/,$lappname);
-	@lappdepl = split (/\n/,$lappdepl);
+	my @lappname = split (/\n/,$lappname);
+	my @lappdepl = split (/\n/,$lappdepl);
 	foreach ( @lappname ) {
 		s/^.*STRING: .//s;
 		s#_/#-#s;
@@ -174,8 +173,8 @@ if ( $lappname ) {
 		s/^.*STRING: .//s;
 	  	s/"//;
 	}
-	for ( my $x = 0; $x <= $#lappname; $x++ ) {
-		if (( $lappname[$x] =~ m{$lapps} ) && ( $lappdepl[$x] eq DEPLOYED ) ) {
+	for ( $x = 0; $x <= $#lappname; $x++ ) {
+		if (( $lappname[$x] =~ m{$lapps} ) && ( $lappdepl[$x] eq "DEPLOYED" ) ) {
 			$dplnum++;
 		}
 		elsif ( $lappname[$x] =~ m{$lapps} ) {
@@ -192,7 +191,7 @@ $strout="$strout. | $perfout";
 
 if ( $dplcrit ) {
 	if ( $health == 0 ) { $warn=$crit; $crit=0; }
-	my $warnout=$errout;
+	$warnout=$errout;
 	$errout=undef;
 	if ( $dplnum != $dplcrit ) {
 		$crit++;
@@ -233,3 +232,4 @@ else {
 	print "$strout\n";
 	exit $STATE_OK;
 }
+
