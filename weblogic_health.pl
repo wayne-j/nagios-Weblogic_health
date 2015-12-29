@@ -30,7 +30,7 @@ sub print_usage {
     print "weblogic_health.pl IP:Port COMMUNITY [#apps] [#runtimes] [#JDBC]\n";
 }
 
-if  ( $ARGV[0] eq "" || $ARGV[1] eq "" ) {
+if  ( !$ARGV[0] || !$ARGV[1] ) {
     print_usage();
     exit $STATE_UNKNOWN;
 }
