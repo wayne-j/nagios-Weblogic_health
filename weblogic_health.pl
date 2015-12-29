@@ -35,7 +35,7 @@ if  ( $ARGV[0] eq "" || $ARGV[1] eq "" ) {
     exit $STATE_UNKNOWN;
 }
 
-if (( $ARGV[2] ) && ( $ARGV[3] eq "" || $ARGV[4] eq "" )) {
+if (( $ARGV[2] ) && ( !$ARGV[3] || !$ARGV[4] )) {
         print_usage();
         exit $STATE_UNKNOWN;
 }
