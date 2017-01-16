@@ -15,9 +15,9 @@ JVM server health and heap usage
 
 ## Performance Data:
 
-JVM Heap usage.
-Total number of current JDCB connections
-Total number of (user)sessions
+JVM Heap usage  
+Total number of current JDCB connections  
+Total number of (user)sessions  
 
 ## Usage
 ```
