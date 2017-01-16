@@ -6,9 +6,11 @@
 #	* enhanced commandline options and manageability.
 #   * removed lstatus as that MIB doesn't exist.
 #   * added debug to show more info while testing.
+#   * added option to filter applications.
+#   * added option to count (user) sessions.
 #
-#https://github.com/waynejgrace/nagios-Weblogic_health
-#version 0.02 12/28/2015
+# https://github.com/waynejgrace/nagios-Weblogic_health
+# version 0.02 12/28/2015
 
 use strict;
 use warnings;
