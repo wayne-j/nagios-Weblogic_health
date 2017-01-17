@@ -1,12 +1,37 @@
 #!/usr/bin/perl
-#https://github.com/waynejgrace/nagios-Weblogic_health
-#version 0.02 12/28/2015
+# Forked by Gerrit Doornenbal 
+# https://github.com/gdoornenbal/nagios-Weblogic_health
+#
+# version 0.5 jan 2017
+#	* enhanced commandline options and manageability.
+#   * removed lstatus as that MIB doesn't exist.
+#   * added debug to show more info while testing.
+#   * added option to filter applications.
+#   * added option to count (user) sessions.
+#
+# https://github.com/waynejgrace/nagios-Weblogic_health
+# version 0.02 12/28/2015
+
 use strict;
 use warnings;
+use File::Basename;
+use Getopt::Long;
 
-### identify your named deployed applications for filtering, separated by "|"
-### my $lapps="fooapp|fooapp2";
+my $version="0.5";
+
+#Commandline option vars.
+my $port=165;
+my $COMMUNITY="public";
+my $IP;
 my $lapps="";
+my $dplcrit;
+my $runcrit;
+my $jdbccrit;
+my $perfout="";
+my $minheapfree=10;
+my $debug =	0;
+my $perf = 0;
+my $weburifilter="formsweb.war|web.war";
 
 my $x=0;
 my $k=0;
@@ -19,49 +44,101 @@ my $warnout="";
 my $dplnum=0;
 my $runnum=0;
 my $jdbcnum=0;
-my $perfout="";
+my $sessions=0;
+
 my $STATE_CRITICAL=2;
 my $STATE_WARNING=1;
 my $STATE_UNKNOWN=3;
 my $STATE_OK=0;
 my $jdbcerrout="";
 
-sub print_usage {
-    print "weblogic_health.pl IP:Port COMMUNITY [#apps] [#runtimes] [#JDBC]\n";
+
+sub print_usage() {
+	my $basename = basename($0);
+
+print <<DATA;
+
+ $basename -H hostname [-P port] [-C community] [-h] [-d] [-f] [-a int][-n str][-u str] [-r int][-m %] [-j int]
+ Version: $version
+	
+ -h|--help          This help screen
+ -H|--hostname      Hostname to send query.
+ -P|--port          Port where SNMP server is listening [Default: $port]
+ -C|--community     SNMP Community [Default: public]
+ -a|--appscount     Check for number of deployed applications
+ -n|--appname         Filter deployed applications, separated by "|", eg "fooapp|fooapp2"
+ -u|--urifilter       Default only apps running weburi "formsweb.war" and "web.war" are counted, as most
+                      other apps are system apps.  If you want to monitor those too, you can give a new 
+                      filter here. (without value all apps are selected. You can also use | to separate.)
+ -r|--runtime       Check for number of Weblogic JVM Runtimes.
+ -m|--minheapfree   Maximum allowed percentage Runtime JVM heapspace. [Default $minheapfree]
+ -j|--jdbccount     Check number of JDBC connectors.
+ -f|--perf          Show perfdata JVM heapspace, JDBC and app-user-sessions.
+ -d|--debug         Activate debug mode.
+	
+DATA
+	exit $STATE_UNKNOWN;
 }
 
-if  ( !$ARGV[0] || !$ARGV[1] ) {
-    print_usage();
-    exit $STATE_UNKNOWN;
+sub check_options () {
+	my $o_help;
+	my $o_debug;
+
+	Getopt::Long::Configure ("bundling");
+	GetOptions(
+		'h|help'	=> \$o_help,
+		'H|hostname:s'	=> \$IP,
+		'C|community:s'	=> \$COMMUNITY,
+		'P|port:i'	=> \$port,
+		'a|appscount:i'	=> \$dplcrit,
+		'n|appname:s' => \$lapps,
+		'u|urifilter:s' => \$weburifilter,
+		'r|runtime:i' => \$runcrit,
+		'j|jdbccount:i' => \$jdbccrit,
+		'm|minheapfree:i' => \$minheapfree,
+		'd|debug'	=> \$debug,
+		'f|perf'	=> \$perf,
+	);
+
+	print_usage() if (defined($o_help));
+	$debug = 1 if (defined($o_debug));
+	if ( $minheapfree !~ /^\d+$/ or ($minheapfree <= 0 or $minheapfree > 100)) {
+		print "\nPlease insert an integer value between 1 and 100 for --minheapfree\n";
+		print_usage();
+	}
+	if ( !defined($IP) ) {
+		print "\nPlease give a host to check\n";
+		print_usage();
+	}
 }
 
-if (( $ARGV[2] ) && ( !$ARGV[3] || !$ARGV[4] )) {
-        print_usage();
-        exit $STATE_UNKNOWN;
-}
 
-my $IP=$ARGV[0];
-my $COMMUNITY=$ARGV[1];
-my $dplcrit=$ARGV[2];
-my $runcrit=$ARGV[3];
-my $jdbccrit=$ARGV[4];
+#Start 
+check_options();
 
-my $lservers =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.360.1.60 2> /dev/null`;
+#Retrieve SNMP info..
+#Weblogic Runtimes
+my $lservers =`snmpwalk -v 1 -c $COMMUNITY $IP:$port enterprises.140.625.360.1.60 2> /dev/null`;
 if ( !$lservers ) { print "No Weblogic Server Responding to SNMP.\n"; exit $STATE_UNKNOWN;}
-my $connections =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.190.1.25 2> /dev/null`;
-my $totconnections =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.190.1.60 2> /dev/null`;
-my $nameconnections =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.190.1.05 2> /dev/null`;
-my $connector =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.190.1.75 2> /dev/null`;
-my $lservername =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.360.1.5 2> /dev/null`;
-my $lstatus =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.360.1.99 2> /dev/null`;
-my $lheap =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.340.1.52 2> /dev/null`;
-my $lheapname =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.340.1.15 2> /dev/null`;
-my $lappname =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.430.1.15 2> /dev/null`;
-my $lappdepl =`snmpwalk -v 1 -c $COMMUNITY $IP enterprises.140.625.430.1.30 2> /dev/null`;
+my $lservername =`snmpwalk -v 1 -c $COMMUNITY $IP:$port enterprises.140.625.360.1.5 2> /dev/null`;
+my $lheapname =`snmpwalk -v 1 -c $COMMUNITY $IP:$port enterprises.140.625.340.1.15 2> /dev/null`;
+my $lheap =`snmpwalk -v 1 -c $COMMUNITY $IP:$port enterprises.140.625.340.1.52 2> /dev/null`;
 
+#jdbc
+my $connections =`snmpwalk -v 1 -c $COMMUNITY $IP:$port enterprises.140.625.190.1.25 2> /dev/null`;
+my $maxconnections =`snmpwalk -v 1 -c $COMMUNITY $IP:$port enterprises.140.625.190.1.60 2> /dev/null`;
+my $nameconnections =`snmpwalk -v 1 -c $COMMUNITY $IP:$port enterprises.140.625.190.1.05 2> /dev/null`;
+my $connectorstate =`snmpwalk -v 1 -c $COMMUNITY $IP:$port enterprises.140.625.190.1.75 2> /dev/null`;
+
+#Application Deployments
+my $lappname =`snmpwalk -v 1 -c $COMMUNITY $IP:$port enterprises.140.625.430.1.25 2> /dev/null`;
+my $lappdepl =`snmpwalk -v 1 -c $COMMUNITY $IP:$port enterprises.140.625.430.1.30 2> /dev/null`;
+my $lappsess =`snmpwalk -v 1 -c $COMMUNITY $IP:$port enterprises.140.625.430.1.50 2> /dev/null`;
+my $lappuri = `snmpwalk -v 1 -c $COMMUNITY $IP:$port enterprises.140.625.430.1.76 2> /dev/null`;
+
+#Weblogic runtimes logic
 my @lservers = split (/\n/,$lservers);
 my @lservername = split (/\n/,$lservername);
-my @lstatus = split (/\n/,$lstatus);
 foreach ( @lservers ) {
 	s/^.*STRING:.//s;
 }
@@ -69,12 +146,9 @@ foreach ( @lservername ) {
    	s/^.*Name=//s;
    	s/,Type.*//;
 }
-foreach ( @lstatus ) {
-	s/^.*State://s;
-	s/,MBean:.*Code://;
-	s/"//;
-}	
+
 for ( $x = 0; $x <= $#lservers; $x++ ) {
+	if ( $debug ) { print "Weblogic instance: $lservername[$x] is $lservers[$x]\n"; } 
 	if ( $lservers[$x] !~ "RUNNING" ) {
 		$errout = $errout."Weblogic Runtime $lservername[$x] has status $lservers[$x]. ";
 		$crit++;
@@ -85,61 +159,7 @@ for ( $x = 0; $x <= $#lservers; $x++ ) {
 }
 $strout="$runnum Running weblogic runtime(s)";
 
-for ( $x = 0; $x <= $#lstatus; $x++ ) {
-	if ( $lstatus[$x] !~ "HEALTH_OK" ) {
-		$errout = $errout."$lservername[$x] indicates $lstatus[$x]. ";
-		$crit++;
-		$health++;
-	}
-}	
-
-if ( $connections ) {
-	my @connections = split (/\n/,$connections);
-	my @totconnections = split (/\n/,$totconnections);
-	my @nameconnections = split (/\n/,$nameconnections);
-	my @connector = split (/\n/,$connector);
-	foreach ( @connections ) {
-		s/^.*INTEGER:.//s;
-	}
-	foreach ( @totconnections ) {
-		s/^.*INTEGER:.//s;
-	}
-	foreach ( @nameconnections ) {
-		s/^.*Name=//s;
-		s/,ServerRuntime.*//;
-	}
-	foreach ( @connector ) {
-		s/^.*STRING:.//s;
-	}
-	for ( $x = 0; $x <= $#connections; $x++ ) {
-		$k=($connections[$x]+$k);
-		if ( $connections[$x] >= $totconnections[$x] ) {
-			$jdbcerrout = $jdbcerrout.$nameconnections[$x]." ";
-			$crit++;
-			$health++;
-		}	    
-	}
-	for ( $x = 0; $x <= $#connector; $x++ ) {
-		if ( $connector[$x] !~ "Running") {
-		$crit++;
-		$errout= $errout.$nameconnections[$x]." is $connector[$x]. ";
-		}
-		else {
-		$jdbcnum++;
-		}
-	}
-
-$strout = $strout.", $jdbcnum active JDBC connectors with $k connections";
-
-if ($jdbcerrout) {
-	$errout= $errout."JDBC connector(s) $jdbcerrout"."reached max connections. ";
-	}
-}
-else {
-	$crit++;
-	$errout= $errout."No JDBC Connectors Running. ";
-}
-
+# Weblogic heapspace checks
 if( $lheap ) {
 	my @lheap = split (/\n/,$lheap);
 	my @lheapname = split (/\n/,$lheapname);
@@ -151,19 +171,80 @@ if( $lheap ) {
 		s/"//;
 		s/"//;
 	}
+	
 	for ( $x = 0; $x <= $#lheap; $x++ ) {
-		$perfout=$perfout."'$lheapname[$x]'=".(100-$lheap[$x])."%;;90;0;100 ";
-		if ( $lheap[$x] <= 10 ) {
+		$perfout=$perfout."'$lheapname[$x]_heap'=".(100-$lheap[$x])."%;;90;0;100 ";
+		if ( $debug ) { print "Weblogic jvmRuntime : $lheapname[$x] heapspace is $lheap[$x]% free\n"; } 
+		if ( $lheap[$x] <= $minheapfree ) {
 			$errout = $errout."$lheapname[$x] is at $lheap[$x]% heap free. ";
 		$crit++;
 		$health++;
 		}
 	}
 }
+#END Weblogic
 
+#START JDBC
+if ( $connections ) {
+	my @connections = split (/\n/,$connections);
+	my @maxconnections = split (/\n/,$maxconnections);
+	my @nameconnections = split (/\n/,$nameconnections);
+	my @connectorstate = split (/\n/,$connectorstate);
+	foreach ( @connections ) {
+		s/^.*INTEGER:.//s;
+	}
+	foreach ( @maxconnections ) {
+		s/^.*INTEGER:.//s;
+	}
+	foreach ( @nameconnections ) {
+		s/^.*Name=//s;
+		s/,ServerRuntime.*//;
+	}
+	foreach ( @connectorstate ) {
+		s/^.*STRING:.//s;
+	}
+	
+	for ( $x = 0; $x <= $#connections; $x++ ) {
+		$k=($connections[$x]+$k);
+		if ( $connections[$x] >= $maxconnections[$x] ) {
+			$jdbcerrout = $jdbcerrout.$nameconnections[$x]." ";
+			$crit++;
+			$health++;
+		}	    
+	}
+	for ( $x = 0; $x <= $#connectorstate; $x++ ) {
+		if ( $debug ) { print "JDBC Connector: $nameconnections[$x] is $connectorstate[$x]\n"; } 
+		if ( $connectorstate[$x] !~ "Running") {
+		$crit++;
+		$errout= $errout.$nameconnections[$x]." is $connectorstate[$x]. ";
+		}
+		else {
+		$jdbcnum++;
+		}
+	}
+
+$strout = $strout.", $jdbcnum JDBC connector(s)";
+if ( $k != 0 ) {$strout = $strout." with $k connections";}
+
+if ($jdbcerrout) {
+	$errout= $errout."JDBC connector(s) $jdbcerrout"."reached max connections. ";
+	}
+}
+else {
+	$crit++;
+	$errout= $errout."No JDBC Connectors Running. ";
+}
+
+$perfout=$perfout."'JDBC_connections'=$k;;;0; ";
+# END JDBC
+
+
+# Start Weblogic Apps
 if ( $lappname ) {
 	my @lappname = split (/\n/,$lappname);
 	my @lappdepl = split (/\n/,$lappdepl);
+	my @lappuri = split (/\n/,$lappuri);
+	my @lappsess = split (/\n/,$lappsess);
 	foreach ( @lappname ) {
 		s/^.*STRING: .//s;
 		s#_/#-#s;
@@ -173,62 +254,73 @@ if ( $lappname ) {
 		s/^.*STRING: .//s;
 	  	s/"//;
 	}
+	foreach ( @lappuri ) {
+		s/^.*STRING: .//s;
+	  	s/"//;
+	}
+	foreach ( @lappsess ) {
+		s/^.*INTEGER:.//s;
+	}
+
 	for ( $x = 0; $x <= $#lappname; $x++ ) {
-		if (( $lappname[$x] =~ m{$lapps} ) && ( $lappdepl[$x] eq "DEPLOYED" ) ) {
+		if ( $debug ) { print "Application $lappname[$x] uri $lappuri[$x] is $lappdepl[$x], current $lappsess[$x] sessions\n"; } 
+		
+		if (( $lappname[$x] =~ m{$lapps} ) && ($lappuri[$x] =~ $weburifilter) && ( $lappdepl[$x] eq "DEPLOYED" ) ) {
 			$dplnum++;
+			$sessions=$sessions+$lappsess[$x];
+		    if ( $debug ) { print "  Selected!!\n"; } 
 		}
-		elsif ( $lappname[$x] =~ m{$lapps} ) {
-		$errout= $errout."$lappname[$x] is $lappdepl[$x]. ";
-		$crit++;
+		elsif ( $lappname[$x] =~ m{$lapps} && ($lappuri[$x] =~ $weburifilter) ) {
+			$errout= $errout."$lappname[$x] is $lappdepl[$x]. ";
+			$crit++;
+			if ( $debug ) { print "  Selected, but not Deployed!!\n"; } 
 		}
 	}
-  $strout= "$dplnum Apps deployed, ".$strout;
+  $strout= "$dplnum Apps deployed, $sessions users active. ".$strout;
   if ( $dplnum == 0 ) { $crit++; }
 }
+$perfout=$perfout."'User_sessions'=$sessions;;;0;";
+# END Weblogic Apps
 
-$perfout=$perfout."'jdbc connections'=$k;;;";
-$strout="$strout. | $perfout";
 
-if ( $dplcrit ) {
+#Check for Performance data output.
+if ( $perf == 1 ) { $strout="$strout.|$perfout"; }
+
+# Check for count mismatches, CRITICAL state when incorrect.
+	#print "Health = $health Warn=$warn Crit=$crit\n";
 	if ( $health == 0 ) { $warn=$crit; $crit=0; }
 	$warnout=$errout;
-	$errout="";
-	if ( $dplnum != $dplcrit ) {
+	#$errout="";
+
+	if ( $dplcrit && $dplnum != $dplcrit ) {
 		$crit++;
 		$errout= "Application count mismatch ($dplnum,$dplcrit). ";
 	}
-	if ( $runnum != $runcrit ) {
+	if ( $runcrit && $runnum != $runcrit ) {
 		$crit++;
 		$errout= "Runtime count mismatch ($runnum,$runcrit). ".$errout;
 	}
-	if ( $jdbcnum != $jdbccrit ) {
+	if ( $jdbccrit && $jdbcnum != $jdbccrit ) {
 		$crit++;
 		$errout= "JDBC count mismatch ($jdbcnum,$jdbccrit). ".$errout;
 	}
+
+#Exit script with state info.
 if ( $crit != 0 ) {
-        print "Error: $errout$warnout\n";
+        print "CRITICAL: $errout$warnout\n";
         print "$strout\n";
         exit $STATE_CRITICAL;
 }
 elsif ( $warn != 0 ) {
-        print "Warning: $warnout\n";
+        print "WARNING: $warnout\n";
         print "$strout\n";
 	exit $STATE_WARNING;
 }
 else {
-        print "Everything OK: ";
+        print "OK: ";
         print "$strout\n";
 	exit $STATE_OK;
 }
-}
 
-if ( $crit != 0 ) {
-	print "Error: $errout\n";
-	print "$strout\n";
-	exit $STATE_CRITICAL;
-}
-else { 
-	print "Everything OK: ";
-	print "$strout\n";
-	exit $STATE_OK;
-}
+
+
