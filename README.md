@@ -7,17 +7,17 @@ In example specify a critical scenario where less than (x) applications, servers
 
 ## Monitors:
 
-Number and health of applications deployed
-Number of application user sessions 
-Number and health of runtimes deployed
-Number and health of JDBC connectors including connection count
-JVM server health and heap usage
+Number and health of applications deployed  
+Number of application user sessions  
+Number and health of runtimes deployed  
+Number and health of JDBC connectors including connection count  
+JVM server health and heap usage  
 
 ## Performance Data:
 
-JVM Heap usage.
-Total number of current JDCB connections
-Total number of (user)sessions
+JVM Heap usage  
+Total number of current JDCB connections  
+Total number of (user)sessions  
 
 ## Usage
 ```
